@@ -1,10 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ChatMessage, WSMessage } from "../types";
 
+function makeId(): string {
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.makeId();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function getChatId(): string {
   let id = sessionStorage.getItem("seedance_chat_id");
   if (!id) {
-    id = uuid();
+    id = makeId();
     sessionStorage.setItem("seedance_chat_id", id);
   }
   return id;
@@ -53,7 +60,7 @@ export function useWebSocket() {
           setMessages((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: makeId(),
               role: "assistant",
               content: data.content || "",
               timestamp: Date.now(),
@@ -65,7 +72,7 @@ export function useWebSocket() {
           setMessages((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: makeId(),
               role: "system",
               content: "",
               toolCall: {
@@ -100,7 +107,7 @@ export function useWebSocket() {
           setMessages((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: makeId(),
               role: "system",
               content: `错误: ${data.error || "未知错误"}`,
               timestamp: Date.now(),
@@ -138,7 +145,7 @@ export function useWebSocket() {
     setMessages((prev) => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: makeId(),
         role: "user",
         content: content + (files?.length ? `\n📎 ${files.map((f) => f.name).join(", ")}` : ""),
         timestamp: Date.now(),
