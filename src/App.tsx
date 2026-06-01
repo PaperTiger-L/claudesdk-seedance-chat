@@ -216,7 +216,8 @@ export default function App() {
   const handleSend = useCallback((text?: string) => {
     const content = text || input.trim();
     if (!content && !uploadedFiles.length) return;
-    sendMessage(content, uploadedFiles.length ? uploadedFiles : undefined);
+    const sent = sendMessage(content, uploadedFiles.length ? uploadedFiles : undefined);
+    if (!sent) return;
     setInput("");
     clearFiles();
   }, [input, uploadedFiles, sendMessage, clearFiles]);
@@ -258,7 +259,7 @@ export default function App() {
         {/* Messages */}
         <main className="flex-1 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
-            <WelcomeScreen onSelect={handleSend} />
+            <WelcomeScreen onSelect={(text) => setInput(text)} />
           ) : (
             messages.map((msg) => (
               <MessageBubble key={msg.id} msg={msg} />

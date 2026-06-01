@@ -128,7 +128,8 @@ export function useWebSocket() {
   }, [connect]);
 
   const sendMessage = useCallback((content: string, files?: Array<{ name: string; path: string }>) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
     const fileNote = files?.length
       ? `\n\n已上传文件: ${files.map((f) => `${f.name} (${f.path})`).join(", ")}`
@@ -146,9 +147,10 @@ export function useWebSocket() {
     ]);
 
     setIsThinking(true);
-    wsRef.current.send(
+    ws.send(
       JSON.stringify({ type: "chat", chatId: getChatId(), content: content + fileNote })
     );
+    return true;
   }, []);
 
   return { messages, sendMessage, isConnected, isThinking };

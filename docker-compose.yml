@@ -11,12 +11,7 @@ services:
       MODEL: ${MODEL:-deepseek-v4-pro-260425}
       PORT: ${PORT:-3003}
     volumes:
-      - seedance_output:/app/output
-      - seedance_uploads:/app/uploads
-      - seedance_logs:/app/logs
+      - ./output:/app/output
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
     restart: unless-stopped
-
-volumes:
-  seedance_output:
-  seedance_uploads:
-  seedance_logs:
