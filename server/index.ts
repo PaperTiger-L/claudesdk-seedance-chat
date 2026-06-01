@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
@@ -108,6 +109,7 @@ async function startListening(session: Session) {
 
 // --- Express ---
 const app = express();
+app.use(compression());
 app.use(express.json());
 const distPath = fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
   ? path.join(process.cwd(), "dist")
