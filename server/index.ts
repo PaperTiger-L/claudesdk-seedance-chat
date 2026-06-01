@@ -109,7 +109,9 @@ async function startListening(session: Session) {
 // --- Express ---
 const app = express();
 app.use(express.json());
-const distPath = path.join(__dirname, "..", "dist");
+const distPath = fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
+  ? path.join(process.cwd(), "dist")
+  : path.join(__dirname, "..", "dist");
 app.use(express.static(distPath));
 app.use("/output", express.static(OUTPUT_DIR));
 
