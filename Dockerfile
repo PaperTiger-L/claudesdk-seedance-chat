@@ -16,5 +16,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/.claude ./.claude
+RUN mkdir -p /app/output /app/uploads /app/logs && chown -R node:node /app
+USER node
 EXPOSE 3003
 CMD ["npm", "start"]
