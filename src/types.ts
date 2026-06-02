@@ -13,6 +13,15 @@ export interface ChatMessage {
   files?: Array<{ name: string; path: string }>;
 }
 
+export interface ConversationRecord {
+  id: string;
+  title: string;
+  preview: string;
+  mode: ChatMode;
+  updatedAt: number;
+  messageCount: number;
+}
+
 export interface WSMessage {
   type: "subscribed" | "user_message" | "assistant_message" | "tool_use" | "result" | "error";
   chatId?: string;
@@ -23,12 +32,4 @@ export interface WSMessage {
   cost?: number;
   duration?: number;
   error?: string;
-}
-
-export interface GeneratedFile {
-  name: string;
-  path: string;
-  size: number;
-  type: "script" | "asset" | "storyboard" | "ad";
-  modified: string;
 }
