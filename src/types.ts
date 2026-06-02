@@ -1,3 +1,5 @@
+export type ChatMode = "drama" | "ad";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -27,6 +29,6 @@ export interface GeneratedFile {
   name: string;
   path: string;
   size: number;
-  type: "script" | "asset" | "storyboard";
+  type: "script" | "asset" | "storyboard" | "ad";
   modified: string;
 }

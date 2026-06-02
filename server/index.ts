@@ -3,7 +3,7 @@ import compression from "compression";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
-import { AgentSession, SDKMessage } from "./agent-client.js";
+import { AgentSession, ChatMode, SDKMessage } from "./agent-client.js";
 import { fileLog } from "./logger.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -18,6 +18,7 @@ interface ClientWS extends WebSocket {
 
 interface Session {
   id: string;
+  mode: ChatMode;
   agent: AgentSession;
   subscribers: Set<ClientWS>;
   listening: boolean;
@@ -54,11 +55,15 @@ const upload = multer({
   },
 });
 
-function getOrCreateSession(chatId: string): Session {
+function getOrCreateSession(chatId: string, mode: ChatMode = "drama"): Session {
   let session = sessions.get(chatId);
-  if (!session) {
-    fileLog("Server", "New session:", chatId);
-    session = { id: chatId, agent: new AgentSession(), subscribers: new Set(), listening: false };
+  if (!session || session.mode !== mode) {
+    if (session) {
+      session.agent.close();
+      sessions.delete(chatId);
+    }
+    fileLog("Server", "New session:", chatId, "mode:", mode);
+    session = { id: chatId, mode, agent: new AgentSession(mode), subscribers: new Set(), listening: false };
     sessions.set(chatId, session);
   }
   return session;
@@ -137,12 +142,22 @@ app.get("/api/files", (_req, res) => {
 app.get("/api/output", (_req, res) => {
   const files = fs.readdirSync(OUTPUT_DIR).map((name) => {
     const stat = fs.statSync(path.join(OUTPUT_DIR, name));
-    let type: "script" | "asset" | "storyboard" = "script";
+    let type: "script" | "asset" | "storyboard" | "ad" = "script";
     if (name.includes("素材")) type = "asset";
-    else if (name.includes("分镜")) type = "storyboard";
+    else if (name.includes("分镜") || name.includes("TVC")) type = "storyboard";
+    else if (name.includes("广告") || name.includes("带货")) type = "ad";
     return { name, path: `output/${name}`, size: stat.size, type, modified: stat.mtime };
   });
   res.json(files);
+});
+
+app.delete("/api/output/:name", (req, res) => {
+  const fileName = path.basename(req.params.name);
+  const filePath = path.join(OUTPUT_DIR, fileName);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+  fs.unlinkSync(filePath);
+  fileLog("Output", "Deleted", fileName);
+  res.json({ success: true, name: fileName });
 });
 
 app.post("/api/upload", upload.single("file"), (req, res) => {
@@ -175,7 +190,7 @@ wss.on("connection", (ws: ClientWS) => {
 
     if (msg.type === "subscribe") {
       const chatId = msg.chatId || "default";
-      const session = getOrCreateSession(chatId);
+      const session = getOrCreateSession(chatId, msg.mode === "ad" ? "ad" : "drama");
       session.subscribers.add(ws);
       ws.chatId = chatId;
       ws.send(JSON.stringify({ type: "subscribed", chatId }));
@@ -183,7 +198,8 @@ wss.on("connection", (ws: ClientWS) => {
 
     if (msg.type === "chat") {
       const chatId = msg.chatId || "default";
-      const session = getOrCreateSession(chatId);
+      const mode: ChatMode = msg.mode === "ad" ? "ad" : "drama";
+      const session = getOrCreateSession(chatId, mode);
       session.subscribers.add(ws);
       ws.chatId = chatId;
       broadcast(session, { type: "user_message", content: msg.content });

@@ -19,30 +19,47 @@ export interface SDKMessage {
   duration_ms?: number;
 }
 
-export class AgentSession {
-  private queue: MessageQueue;
-  private outputIterator: AsyncIterator<SDKMessage> | null = null;
-  public sdkSessionId: string | null = null;
-  private started = false;
+export type ChatMode = "drama" | "ad";
 
-  constructor() {
-    this.queue = new MessageQueue();
+function buildSystemPrompt(mode: ChatMode): string {
+  if (mode === "ad") {
+    return `你是 SeedanceChat，一个专业的 AI 广告小视频创作助手，专为 Seedance 2.0 平台服务。
+
+你要帮助用户生成广告视频、带货视频、品牌TVC、产品展示短片，而不是短剧。
+
+工作方式：
+1. 先判断用户需求更偏向：带货视频、品牌TVC、产品展示、广告提示词优化
+2. 如果信息不足，用普通中文文本追问，不要调用 AskUserQuestion
+3. 输出以广告转化和视觉表达为核心的结构化结果
+4. 使用 Write 工具将结果保存到 output/ 目录
+5. 用中文回复用户
+
+重要规则：
+- 不要把广告需求改写成多集短剧
+- 带货视频优先使用 3-4 个镜头结构：钩子、卖点演示、场景代入、促单转化
+- 品牌TVC优先使用 5 镜头 × 3 秒结构，强调品牌调性、材质、光影、Logo/Slogan 落版
+- 如果用户没有提供 Slogan，不要自行捏造
+- 所有追问都使用普通文本聊天完成
+- 强调产品卖点、目标人群、品牌调性、投放平台、画幅比例
+
+文件输出建议：
+- 广告脚本：output/[标题]_广告脚本.md
+- 带货提示词：output/[标题]_带货提示词.md
+- TVC分镜：output/[标题]_TVC分镜.md
+
+如果用户提供的信息不足以开始创作，直接用普通文本主动询问以下关键参数：
+1. 产品名称/品类
+2. 核心卖点
+3. 目标人群
+4. 品牌调性
+5. 投放平台（抖音/TikTok/快手/品牌官网等）
+6. 画幅比例（9:16 / 16:9 / 1:1）
+7. 是否有 Slogan
+
+用户上传的文件在 uploads/ 目录下，生成的文件保存到 output/ 目录。`;
   }
 
-  private ensureStarted() {
-    if (this.started) return;
-    this.started = true;
-
-    fileLog("Agent", "Starting SDK | MODEL:", process.env.MODEL || "sonnet", "| BASE_URL:", process.env.ANTHROPIC_BASE_URL || "(default)");
-
-    try {
-      const stream = query({
-        prompt: this.queue as any,
-        options: {
-          cwd: path.resolve(process.cwd()),
-          settingSources: ["project"],
-          allowedTools: ["Skill", "Read", "Write", "Glob", "Grep"],
-          systemPrompt: `你是 SeedanceChat，一个专业的 AI 视频脚本创作助手，专为 Seedance 2.0 平台服务。
+  return `你是 SeedanceChat，一个专业的 AI 视频脚本创作助手，专为 Seedance 2.0 平台服务。
 
 你拥有一个核心技能：seedance-storyboard-generator。
 
@@ -77,7 +94,35 @@ export class AgentSession {
 4. 基调（史诗/温馨/悬疑/欢快/忧伤）
 5. 核心梗（一句话卖点）
 
-用户上传的文件在 uploads/ 目录下，生成的文件保存到 output/ 目录。`,
+用户上传的文件在 uploads/ 目录下，生成的文件保存到 output/ 目录。`;
+}
+
+export class AgentSession {
+  private queue: MessageQueue;
+  private outputIterator: AsyncIterator<SDKMessage> | null = null;
+  public sdkSessionId: string | null = null;
+  private started = false;
+  private readonly mode: ChatMode;
+
+  constructor(mode: ChatMode = "drama") {
+    this.queue = new MessageQueue();
+    this.mode = mode;
+  }
+
+  private ensureStarted() {
+    if (this.started) return;
+    this.started = true;
+
+    fileLog("Agent", "Starting SDK | MODE:", this.mode, "| MODEL:", process.env.MODEL || "sonnet", "| BASE_URL:", process.env.ANTHROPIC_BASE_URL || "(default)");
+
+    try {
+      const stream = query({
+        prompt: this.queue as any,
+        options: {
+          cwd: path.resolve(process.cwd()),
+          settingSources: ["project"],
+          allowedTools: ["Skill", "Read", "Write", "Glob", "Grep"],
+          systemPrompt: buildSystemPrompt(this.mode),
           maxTurns: 30,
           model: process.env.MODEL || "sonnet",
           permissionMode: "bypassPermissions",

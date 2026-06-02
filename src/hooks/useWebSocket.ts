@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { ChatMessage, WSMessage } from "../types";
+import type { ChatMessage, ChatMode, WSMessage } from "../types";
 
 function makeId(): string {
   if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
-    return globalThis.makeId();
+    return globalThis.crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -17,6 +17,12 @@ function getChatId(): string {
   return id;
 }
 
+function resetChatId(): string {
+  const id = makeId();
+  sessionStorage.setItem("seedance_chat_id", id);
+  return id;
+}
+
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
 
 export function useWebSocket() {
@@ -26,6 +32,12 @@ export function useWebSocket() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
+
+  const subscribe = useCallback((chatId?: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "subscribe", chatId: chatId || getChatId() }));
+  }, []);
 
   const connect = useCallback(() => {
     if (wsRef.current) {
@@ -39,7 +51,7 @@ export function useWebSocket() {
     ws.onopen = () => {
       if (!mountedRef.current) { ws.close(); return; }
       setIsConnected(true);
-      ws.send(JSON.stringify({ type: "subscribe", chatId: getChatId() }));
+      subscribe();
     };
 
     ws.onclose = () => {
@@ -118,7 +130,7 @@ export function useWebSocket() {
     };
 
     wsRef.current = ws;
-  }, []);
+  }, [subscribe]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -134,7 +146,7 @@ export function useWebSocket() {
     };
   }, [connect]);
 
-  const sendMessage = useCallback((content: string, files?: Array<{ name: string; path: string }>) => {
+  const sendMessage = useCallback((content: string, mode: ChatMode, files?: Array<{ name: string; path: string }>) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
@@ -155,10 +167,17 @@ export function useWebSocket() {
 
     setIsThinking(true);
     ws.send(
-      JSON.stringify({ type: "chat", chatId: getChatId(), content: content + fileNote })
+      JSON.stringify({ type: "chat", chatId: getChatId(), mode, content: content + fileNote })
     );
     return true;
   }, []);
 
-  return { messages, sendMessage, isConnected, isThinking };
+  const clearConversation = useCallback(() => {
+    setMessages([]);
+    setIsThinking(false);
+    const chatId = resetChatId();
+    subscribe(chatId);
+  }, [subscribe]);
+
+  return { messages, sendMessage, clearConversation, isConnected, isThinking };
 }

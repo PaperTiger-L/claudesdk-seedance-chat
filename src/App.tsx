@@ -2,10 +2,29 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useFileUpload } from "./hooks/useFileUpload";
 import ReactMarkdown from "react-markdown";
-import type { ChatMessage, GeneratedFile } from "./types";
+import type { ChatMessage, ChatMode, GeneratedFile } from "./types";
+
+function getModeMeta(mode: ChatMode) {
+  if (mode === "ad") {
+    return {
+      icon: "📣",
+      title: "广告模式",
+      subtitle: "AI 广告小视频创作助手",
+      uploadTitle: "上传产品资料文本",
+      placeholder: "描述你的产品、卖点、受众或广告需求...",
+    };
+  }
+  return {
+    icon: "🎬",
+    title: "短剧模式",
+    subtitle: "AI 视频脚本创作助手",
+    uploadTitle: "上传故事文本",
+    placeholder: "描述你想创作的视频内容...",
+  };
+}
 
 // --- File Sidebar ---
-function FileSidebar({ files, onRefresh }: { files: GeneratedFile[]; onRefresh: () => void }) {
+function FileSidebar({ files, onRefresh, onDelete }: { files: GeneratedFile[]; onRefresh: () => void; onDelete: (file: GeneratedFile) => void }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState("");
 
@@ -29,6 +48,7 @@ function FileSidebar({ files, onRefresh }: { files: GeneratedFile[]; onRefresh: 
     if (type === "script") return "🎬";
     if (type === "asset") return "🎨";
     if (type === "storyboard") return "🎞️";
+    if (type === "ad") return "📣";
     return "📄";
   };
 
@@ -36,6 +56,7 @@ function FileSidebar({ files, onRefresh }: { files: GeneratedFile[]; onRefresh: 
     if (type === "script") return "剧本";
     if (type === "asset") return "素材";
     if (type === "storyboard") return "分镜";
+    if (type === "ad") return "广告";
     return "文件";
   };
 
@@ -50,23 +71,24 @@ function FileSidebar({ files, onRefresh }: { files: GeneratedFile[]; onRefresh: 
           <p className="text-xs text-gray-600 text-center mt-4 px-2">尚无生成文件，开始创作后将自动出现在这里</p>
         )}
         {files.map((f) => (
-          <button
+          <div
             key={f.path}
-            onClick={() => openPreview(f.path)}
-            className={`w-full text-left px-3 py-2 border-b border-gray-800/50 hover:bg-gray-800/50 transition-colors ${preview === f.path ? "bg-gray-800" : ""}`}
+            className={`px-3 py-2 border-b border-gray-800/50 transition-colors ${preview === f.path ? "bg-gray-800" : "hover:bg-gray-800/50"}`}
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm">{typeIcon(f.type)}</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-gray-200 truncate">{f.name}</p>
-                <p className="text-[10px] text-gray-500">{typeLabel(f.type)}</p>
-              </div>
+              <button onClick={() => openPreview(f.path)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                <span className="text-sm">{typeIcon(f.type)}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-200 truncate">{f.name}</p>
+                  <p className="text-[10px] text-gray-500">{typeLabel(f.type)}</p>
+                </div>
+              </button>
+              <button onClick={() => onDelete(f)} className="text-[10px] text-red-400 hover:text-red-300 px-1 shrink-0">删除</button>
             </div>
-          </button>
+          </div>
         ))}
       </div>
 
-      {/* Preview panel */}
       {preview && (
         <div className="border-t border-gray-800 flex flex-col max-h-[50%]">
           <div className="flex items-center justify-between px-3 py-1 border-b border-gray-800/50">
@@ -85,7 +107,6 @@ function FileSidebar({ files, onRefresh }: { files: GeneratedFile[]; onRefresh: 
   );
 }
 
-// --- Message Bubble ---
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   if (msg.role === "user") {
     return (
@@ -154,19 +175,27 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-// --- Welcome Screen ---
-function WelcomeScreen({ onSelect }: { onSelect: (text: string) => void }) {
-  const templates = [
-    { icon: "📖", title: "小说改短剧", desc: "上传小说文本，改编成多集视频短剧", prompt: "帮我把我上传的故事改编成5集×15秒的短视频剧" },
-    { icon: "📝", title: "故事大纲→剧本", desc: "提供故事概念，生成完整剧本和分镜", prompt: "我有一个故事概念，帮我开发成完整的剧本和分镜脚本" },
-    { icon: "🎞️", title: "单集分镜生成", desc: "描述一个场景，直接生成Seedance分镜提示词", prompt: "帮我生成一个15秒的Seedance分镜提示词，场景是：" },
-    { icon: "🔧", title: "优化已有提示词", desc: "粘贴你的Seedance提示词，按万能公式优化", prompt: "帮我优化以下Seedance分镜提示词：\n\n" },
-  ];
+function WelcomeScreen({ mode, onSelect }: { mode: ChatMode; onSelect: (text: string) => void }) {
+  const templates = mode === "ad"
+    ? [
+        { icon: "🛍️", title: "带货视频", desc: "围绕产品卖点生成高转化带货脚本", prompt: "帮我生成一个15秒的带货广告视频脚本，产品是：" },
+        { icon: "📺", title: "品牌 TVC", desc: "生成 5 镜头 × 3 秒的品牌广告分镜", prompt: "帮我生成一个品牌TVC分镜脚本，产品是：" },
+        { icon: "📦", title: "产品展示", desc: "突出材质、功能和使用场景", prompt: "帮我生成一个产品展示广告视频，重点卖点是：" },
+        { icon: "🔧", title: "优化广告提示词", desc: "优化现有广告或带货提示词", prompt: "帮我优化以下广告视频提示词：\n\n" },
+      ]
+    : [
+        { icon: "📖", title: "小说改短剧", desc: "上传小说文本，改编成多集视频短剧", prompt: "帮我把我上传的故事改编成5集×15秒的短视频剧" },
+        { icon: "📝", title: "故事大纲→剧本", desc: "提供故事概念，生成完整剧本和分镜", prompt: "我有一个故事概念，帮我开发成完整的剧本和分镜脚本" },
+        { icon: "🎞️", title: "单集分镜生成", desc: "描述一个场景，直接生成Seedance分镜提示词", prompt: "帮我生成一个15秒的Seedance分镜提示词，场景是：" },
+        { icon: "🔧", title: "优化已有提示词", desc: "粘贴你的Seedance提示词，按万能公式优化", prompt: "帮我优化以下Seedance分镜提示词：\n\n" },
+      ];
+
+  const meta = getModeMeta(mode);
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
-      <span className="text-5xl">🎬</span>
-      <p className="text-lg text-gray-300">SeedanceChat — AI 视频脚本创作助手</p>
+      <span className="text-5xl">{meta.icon}</span>
+      <p className="text-lg text-gray-300">SeedanceChat — {meta.title}</p>
       <p className="text-sm">描述你想创作的视频内容，或选择一个模板开始</p>
       <div className="grid grid-cols-2 gap-3 mt-4 max-w-md">
         {templates.map((t) => (
@@ -185,14 +214,15 @@ function WelcomeScreen({ onSelect }: { onSelect: (text: string) => void }) {
   );
 }
 
-// --- Main App ---
 export default function App() {
-  const { messages, sendMessage, isConnected, isThinking } = useWebSocket();
+  const { messages, sendMessage, clearConversation, isConnected, isThinking } = useWebSocket();
   const { uploading, uploadedFiles, upload, clearFiles } = useFileUpload();
+  const [mode, setMode] = useState<ChatMode>("drama");
   const [input, setInput] = useState("");
   const [outputFiles, setOutputFiles] = useState<GeneratedFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modeMeta = getModeMeta(mode);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -205,22 +235,32 @@ export default function App() {
         const data = await res.json();
         setOutputFiles(data);
       }
-    } catch { /* ignore */ }
+    } catch { }
   }, []);
 
-  // Auto-refresh output files when new messages arrive
   useEffect(() => {
     refreshOutputFiles();
   }, [messages, refreshOutputFiles]);
 
+  const handleDeleteFile = useCallback(async (file: GeneratedFile) => {
+    if (!window.confirm(`确定删除 ${file.name} 吗？`)) return;
+    try {
+      const res = await fetch(`/api/output/${encodeURIComponent(file.name)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete failed");
+      setOutputFiles((prev) => prev.filter((f) => f.path !== file.path));
+    } catch {
+      window.alert("删除失败");
+    }
+  }, []);
+
   const handleSend = useCallback((text?: string) => {
     const content = text || input.trim();
     if (!content && !uploadedFiles.length) return;
-    const sent = sendMessage(content, uploadedFiles.length ? uploadedFiles : undefined);
+    const sent = sendMessage(content, mode, uploadedFiles.length ? uploadedFiles : undefined);
     if (!sent) return;
     setInput("");
     clearFiles();
-  }, [input, uploadedFiles, sendMessage, clearFiles]);
+  }, [input, uploadedFiles, sendMessage, clearFiles, mode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -236,30 +276,40 @@ export default function App() {
     }
   };
 
+  const switchMode = (nextMode: ChatMode) => {
+    setMode(nextMode);
+    setInput("");
+    clearFiles();
+    clearConversation();
+  };
+
   return (
     <div className="h-screen flex bg-gray-950 text-gray-100">
-      {/* Sidebar */}
-      <FileSidebar files={outputFiles} onRefresh={refreshOutputFiles} />
+      <FileSidebar files={outputFiles} onRefresh={refreshOutputFiles} onDelete={handleDeleteFile} />
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900 shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🎬</span>
+        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900 shrink-0 gap-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl">{modeMeta.icon}</span>
             <h1 className="text-lg font-semibold">SeedanceChat</h1>
-            <span className="text-xs text-gray-500">AI 视频脚本创作助手</span>
+            <span className="text-xs text-gray-500 truncate">{modeMeta.subtitle}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-400" : "bg-red-400"}`} />
-            <span className="text-xs text-gray-500">{isConnected ? "已连接" : "断开"}</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex rounded-lg border border-gray-700 overflow-hidden">
+              <button onClick={() => switchMode("drama")} className={`px-3 py-1 text-xs ${mode === "drama" ? "bg-purple-600 text-white" : "bg-gray-900 text-gray-400 hover:text-gray-200"}`}>短剧模式</button>
+              <button onClick={() => switchMode("ad")} className={`px-3 py-1 text-xs ${mode === "ad" ? "bg-purple-600 text-white" : "bg-gray-900 text-gray-400 hover:text-gray-200"}`}>广告模式</button>
+            </div>
+            <button onClick={clearConversation} className="text-xs text-gray-400 hover:text-gray-200">清空对话</button>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-400" : "bg-red-400"}`} />
+              <span className="text-xs text-gray-500">{isConnected ? "已连接" : "断开"}</span>
+            </div>
           </div>
         </header>
 
-        {/* Messages */}
         <main className="flex-1 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
-            <WelcomeScreen onSelect={(text) => setInput(text)} />
+            <WelcomeScreen mode={mode} onSelect={(text) => setInput(text)} />
           ) : (
             messages.map((msg) => (
               <MessageBubble key={msg.id} msg={msg} />
@@ -276,7 +326,6 @@ export default function App() {
           <div ref={messagesEndRef} />
         </main>
 
-        {/* Uploaded files indicator */}
         {uploadedFiles.length > 0 && (
           <div className="px-4 py-2 bg-gray-900 border-t border-gray-800 flex items-center gap-2 flex-wrap">
             {uploadedFiles.map((f) => (
@@ -290,7 +339,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Input */}
         <div className="px-4 py-3 border-t border-gray-800 bg-gray-900 shrink-0">
           <div className="flex items-end gap-2">
             <input
@@ -305,7 +353,7 @@ export default function App() {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
-              title="上传故事文本"
+              title={modeMeta.uploadTitle}
             >
               {uploading ? "⏳" : "📎"}
             </button>
@@ -313,7 +361,7 @@ export default function App() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="描述你想创作的视频内容..."
+              placeholder={modeMeta.placeholder}
               rows={1}
               className="flex-1 bg-gray-800 text-gray-100 rounded-xl px-4 py-2 resize-none outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-500"
             />
